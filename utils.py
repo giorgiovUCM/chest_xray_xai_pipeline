@@ -7,6 +7,10 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torchvision import models, transforms
 
+import sys
+sys.path.append('.')
+from config import IMAGENET_MEAN, IMAGENET_STD
+
 
 """
 Shared utility functions and classes for the chest X-ray XAI pipeline.
@@ -71,8 +75,8 @@ class ChestXrayDataset(Dataset):
         self.tile_size = 4 if resolution == 256 else 16
         self.image_ids = self.df['image_id'].unique().tolist()
         self.normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
+            mean=IMAGENET_MEAN,
+            std=IMAGENET_STD
         )
         self.augment = transforms.Compose([
             transforms.RandomRotation(degrees=5),
