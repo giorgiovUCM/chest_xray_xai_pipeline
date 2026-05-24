@@ -7,6 +7,10 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torchvision import models, transforms
 
+import sys
+sys.path.append('.')
+from config import IMAGENET_MEAN, IMAGENET_STD
+
 
 """
 Shared utility functions and classes for the chest X-ray XAI pipeline.
@@ -71,8 +75,8 @@ class ChestXrayDataset(Dataset):
         self.tile_size = 4 if resolution == 256 else 16
         self.image_ids = self.df['image_id'].unique().tolist()
         self.normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
+            mean=IMAGENET_MEAN,
+            std=IMAGENET_STD
         )
         self.augment = transforms.Compose([
             transforms.RandomRotation(degrees=5),
@@ -121,3 +125,21 @@ def build_model(architecture, device):
         model = models.densenet121(weights=None)
         model.classifier = nn.Linear(1024, 2)
     return model.to(device)
+
+def get_stratification(row, label):
+    """
+    Returns the prediction type (TP, FP, FN, TN) for a given label.
+    
+    Args:
+        row: DataFrame row with pred_{label} and label_{label} columns
+        label: 'aneurysm' or 'cardiomegaly'
+    
+    Returns:
+        str: 'TP', 'FP', 'FN' or 'TN'
+    """
+    pred = row[f'pred_{label}']
+    gt   = row[f'label_{label}']
+    if pred == 1 and gt == 1:   return 'TP'
+    elif pred == 0 and gt == 1: return 'FN'
+    elif pred == 1 and gt == 0: return 'FP'
+    else:                       return 'TN'
