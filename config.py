@@ -4,7 +4,7 @@
 """
 
 
-PROJECT_DIR = ''
+PROJECT_DIR = '/content/cxr'
 
 DATASET_ZIP   = f'{PROJECT_DIR}/filtered_dataset.zip'            # (filtered images + CSVs)
 DATASET_DIR    = f'{PROJECT_DIR}/filtered_dataset'               # filtered dataset (uncompressed)
@@ -18,6 +18,7 @@ MAPS_DIR       = f'{PROJECT_DIR}/grad_cam_maps'                  # Grad-CAM maps
 LABELS = ['aneurysm', 'cardiomegaly']
 LABEL_ID = {'aneurysm': 0, 'cardiomegaly': 1}
 MODELS = ['AN_256', 'DN_256', 'AN_1024', 'DN_1024']
+RESOLUTIONS = [256, 1024]
 CONFIGS = configs = [
     {'name': 'AN_256',  'arq': 'alexnet',  'res': 256,  'metadata': f'{DATASET_DIR}/metadata_256.csv',  'images': f'{DATASET_DIR}/images_256',  'batch': 16},
     {'name': 'DN_256',  'arq': 'densenet', 'res': 256,  'metadata': f'{DATASET_DIR}/metadata_256.csv',  'images': f'{DATASET_DIR}/images_256',  'batch': 16},
