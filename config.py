@@ -9,6 +9,9 @@ PROJECT_DIR = '/content/cxr'
 DATASET_ZIP   = f'{PROJECT_DIR}/filtered_dataset.zip'            # (filtered images + CSVs)
 DATASET_DIR    = f'{PROJECT_DIR}/filtered_dataset'               # filtered dataset (uncompressed)
 KAGGLE_DIR     = f'{PROJECT_DIR}/kaggle_dataset'                 # temporal download of the original dataset to then be filtered and moved to DATASET_DIR in 01_dataset_import.ipynb
+PHYSIONET_DIR  = f'{PROJECT_DIR}/physionet_dataset'              # temporal download of VinDr-CXR DICOM metadata (PatientAge, PatientSex) from PhysioNet
+
+AGE_GROUPS = ['18-39', '40-64', '65+']                            # young adult / middle-aged / geriatric
 
 MODELS_DIR     = f'{PROJECT_DIR}/models'                         # saved models
 
