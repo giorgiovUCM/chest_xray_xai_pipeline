@@ -25,6 +25,71 @@ as both architectures were pretrained on ImageNet.
 """
 
 
+def age_to_group(age):
+    """Maps a patient age (int) to a clinical age-group bucket: 18-39, 40-64, 65+."""
+    if age is None or (isinstance(age, float) and np.isnan(age)):
+        return 'unknown'
+    age = int(age)
+    if 18 <= age <= 39:
+        return '18-39'
+    elif 40 <= age <= 64:
+        return '40-64'
+    elif age >= 65:
+        return '65+'
+    else:
+        return 'unknown'
+
+
+def parse_dicom_age(age_str):
+    """Parses a DICOM-style age string (e.g. '045Y') into an integer number of
+    years. Non-'Y' units are converted to 0 rather than dropped."""
+    if pd.isna(age_str):
+        return np.nan
+    age_str = str(age_str).strip()
+    if len(age_str) < 4:
+        return np.nan
+    value, unit = age_str[:3], age_str[3]
+    try:
+        value = int(value)
+    except ValueError:
+        return np.nan
+    return value if unit == 'Y' else 0
+
+
+def pad_to_square(tensor):
+    """Zero-pads a (C, H, W) tensor to square if it isn't already one.
+    A no-op for this pipeline's images (already square), kept explicit so the
+    documented preprocessing order (N-CLAHE -> Z-score -> zero padding ->
+    augmentation) is literal in code."""
+    c, h, w = tensor.shape
+    if h == w:
+        return tensor
+    diff = abs(h - w)
+    pad_a, pad_b = diff // 2, diff - diff // 2
+    padding = (pad_a, pad_b, 0, 0) if h > w else (0, 0, pad_a, pad_b)
+    return nn.functional.pad(tensor, padding, mode='constant', value=0.0)
+
+
+def saliency_entropy(gradcam_map):
+    """Shannon entropy of a normalized Grad-CAM map. Only comparable within
+    the same architecture (AlexNet vs DenseNet have different native
+    Grad-CAM grid sizes before upsampling)."""
+    p = gradcam_map / (gradcam_map.sum() + 1e-8)
+    return float(-np.sum(p * np.log(p + 1e-8)))
+
+
+def compute_mmd(X, Y, gamma=1.0):
+    """MMD (RBF kernel) between two sets of penultimate-layer feature vectors.
+    High MMD desirable for pathology-vs-control or
+    cardiomegaly-vs-aortic-enlargement; low MMD desirable across demographic
+    strata within one class."""
+    from sklearn.metrics.pairwise import rbf_kernel
+    XX = rbf_kernel(X, X, gamma)
+    YY = rbf_kernel(Y, Y, gamma)
+    XY = rbf_kernel(X, Y, gamma)
+    return float(XX.mean() + YY.mean() - 2 * XY.mean())
+
+
 def apply_nclahe(image_np, tile_size):
     """
     Applies N-CLAHE preprocessing to a grayscale image.
@@ -79,8 +144,10 @@ class ChestXrayDataset(Dataset):
             std=IMAGENET_STD
         )
         self.augment = transforms.Compose([
-            transforms.RandomRotation(degrees=5),
-            transforms.RandomResizedCrop(resolution, scale=(0.9, 1.0)),
+            transforms.RandomApply([transforms.RandomRotation(degrees=5)], p=0.5),
+            transforms.RandomApply(
+                [transforms.RandomResizedCrop(resolution, scale=(0.9, 1.0))], p=0.5
+            ),
         ]) if is_for_train else None
 
     def __len__(self):
@@ -92,10 +159,12 @@ class ChestXrayDataset(Dataset):
         img = apply_nclahe(img, self.tile_size)
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         img = Image.fromarray(img)
-        if self.is_for_train and self.augment:
-            img = self.augment(img)
         img = transforms.ToTensor()(img)
         img = self.normalize(img)
+        img = pad_to_square(img)
+        if self.is_for_train and self.augment:
+            img = self.augment(img)
+
         rows = self.df[self.df['image_id'] == image_id]
         label = torch.zeros(2)
         if 0 in rows['class_id'].values:
