@@ -25,24 +25,11 @@ as both architectures were pretrained on ImageNet.
 """
 
 
-def age_to_group(age):
-    """Maps a patient age (int) to a clinical age-group bucket: 18-39, 40-64, 65+."""
-    if age is None or (isinstance(age, float) and np.isnan(age)):
-        return 'unknown'
-    age = int(age)
-    if 18 <= age <= 39:
-        return '18-39'
-    elif 40 <= age <= 64:
-        return '40-64'
-    elif age >= 65:
-        return '65+'
-    else:
-        return 'unknown'
-
-
 def parse_dicom_age(age_str):
-    """Parses a DICOM-style age string (e.g. '045Y') into an integer number of
-    years. Non-'Y' units are converted to 0 rather than dropped."""
+    """Parses a DICOM-style age string (e.g. '045Y') into an integer number
+    of years. Non-'Y' units (months/weeks/days) are treated as unknown
+    rather than coerced to 0, since VinDr-CXR is an adult-only cohort and
+    a 0-year age is not a meaningful value here."""
     if pd.isna(age_str):
         return np.nan
     age_str = str(age_str).strip()
@@ -53,8 +40,28 @@ def parse_dicom_age(age_str):
         value = int(value)
     except ValueError:
         return np.nan
-    return value if unit == 'Y' else 0
+    if unit != 'Y':
+        return np.nan
+    return value
 
+
+def age_to_group(age):
+    """Maps a patient age (int) to a clinical age-group bucket: 18-39,
+    40-64, 65+. Ages outside the plausible adult range (VinDr-CXR excludes
+    pediatric scans) are treated as unknown, since implausible values like
+    238 are DICOM encoding artifacts, not real ages."""
+    if age is None or (isinstance(age, float) and np.isnan(age)):
+        return 'unknown'
+    age = int(age)
+    if age < 18 or age > 100:
+        return 'unknown'
+    elif age <= 39:
+        return '18-39'
+    elif age <= 64:
+        return '40-64'
+    else:
+        return '65+'
+    
 
 def pad_to_square(tensor):
     """Zero-pads a (C, H, W) tensor to square if it isn't already one.
