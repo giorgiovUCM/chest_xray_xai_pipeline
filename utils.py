@@ -24,32 +24,9 @@ Note: normalization parameters (mean and std) correspond to ImageNet statistics,
 as both architectures were pretrained on ImageNet.
 """
 
-
-def parse_dicom_age(age_str):
-    """Parses a DICOM-style age string (e.g. '045Y') into an integer number
-    of years. Non-'Y' units (months/weeks/days) are treated as unknown
-    rather than coerced to 0, since VinDr-CXR is an adult-only cohort and
-    a 0-year age is not a meaningful value here."""
-    if pd.isna(age_str):
-        return np.nan
-    age_str = str(age_str).strip()
-    if len(age_str) < 4:
-        return np.nan
-    value, unit = age_str[:3], age_str[3]
-    try:
-        value = int(value)
-    except ValueError:
-        return np.nan
-    if unit != 'Y':
-        return np.nan
-    return value
-
-
 def age_to_group(age):
     """Maps a patient age (int) to a clinical age-group bucket: 18-39,
-    40-64, 65+. Ages outside the plausible adult range (VinDr-CXR excludes
-    pediatric scans) are treated as unknown, since implausible values like
-    238 are DICOM encoding artifacts, not real ages."""
+    40-64, 65+. NaN or missing values are treated as unknown."""
     if age is None or (isinstance(age, float) and np.isnan(age)):
         return 'unknown'
     age = int(age)
