@@ -53,21 +53,40 @@ def pad_to_square(tensor):
     padding = (pad_a, pad_b, 0, 0) if h > w else (0, 0, pad_a, pad_b)
     return nn.functional.pad(tensor, padding, mode='constant', value=0.0)
 
-
 def saliency_entropy(gradcam_map):
-    """Shannon entropy of a normalized Grad-CAM map. Only comparable within
-    the same architecture (AlexNet vs DenseNet have different native
-    Grad-CAM grid sizes before upsampling)."""
+    """Shannon entropy of a normalized Grad-CAM map, normalized by log(N)
+    where N is the number of pixels in the map. Raw Shannon entropy scales
+    with log(N), which previously confounded map resolution with genuine
+    concentration of activation -- this normalization (range approximately
+    [0, 1]) makes entropy comparable both within and across architectures
+    and resolutions."""
     p = gradcam_map / (gradcam_map.sum() + 1e-8)
-    return float(-np.sum(p * np.log(p + 1e-8)))
+    raw_entropy = -np.sum(p * np.log(p + 1e-8))
+    max_entropy = np.log(gradcam_map.size)
+    return float(raw_entropy / max_entropy)
 
-
-def compute_mmd(X, Y, gamma=1.0):
+def compute_mmd(X, Y, gamma=None):
     """MMD (RBF kernel) between two sets of penultimate-layer feature vectors.
     High MMD desirable for pathology-vs-control or
-    cardiomegaly-vs-aortic-enlargement; low MMD desirable across demographic
-    strata within one class."""
+    cardiomegaly-vs-aortic-enlargement (internally separable representations);
+    low MMD desirable for TP vs FP/FN (correctly- vs incorrectly-classified
+    cases should not look different internally if reasoning is genuine).
+
+    If gamma is None (default), uses the median heuristic: gamma is set from
+    the median squared pairwise distance across the combined sample, so the
+    kernel bandwidth adapts to the actual scale of each feature space. A
+    fixed gamma=1.0 saturates on high-dimensional features (4096-d AlexNet,
+    1024-d DenseNet), collapsing the kernel to near-zero regardless of what's
+    being compared."""
     from sklearn.metrics.pairwise import rbf_kernel
+    from scipy.spatial.distance import pdist
+
+    if gamma is None:
+        combined = np.vstack([X, Y])
+        sq_dists = pdist(combined, metric='sqeuclidean')
+        median_sq_dist = np.median(sq_dists)
+        gamma = 1.0 / median_sq_dist if median_sq_dist > 0 else 1.0
+
     XX = rbf_kernel(X, X, gamma)
     YY = rbf_kernel(Y, Y, gamma)
     XY = rbf_kernel(X, Y, gamma)
